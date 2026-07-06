@@ -4,3 +4,5 @@ scikit-learn
 python-telegram-bot
 scapy
 python-dotenv
+matplotlib
+flask

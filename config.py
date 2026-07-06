@@ -5,7 +5,7 @@ load_dotenv()
 
 INTERFACE = "Wi-Fi"  # your WiFi interface name
 SAMPLE_INTERVAL = 1  # seconds between RSSI samples
-BASELINE_DURATION = 600  # 10 min baseline collection
+BASELINE_DURATION = 30  # 30 second baseline collection for testing
 THRESHOLD_STD = 2.5  # sensitivity: lower = more sensitive, more false positives
 DATA_DIR = "data"
 BASELINE_FILE = f"{DATA_DIR}/baseline_rssi.csv"

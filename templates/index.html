@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Indoor Whole-House Presence Radar & Trajectory</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Plus+Jakarta+Sans:wght@300;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            background-color: #020617;
+            color: #f3f4f6;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.12) 0, transparent 50%), 
+                radial-gradient(at 50% 0%, rgba(139, 92, 246, 0.08) 0, transparent 50%), 
+                radial-gradient(at 100% 0%, rgba(236, 72, 153, 0.05) 0, transparent 50%);
+        }
+        
+        .font-orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Radar Sonar Wave Animation */
+        @keyframes radar-sweep {
+            0% {
+                transform: scale(0.1);
+                opacity: 0.85;
+            }
+            100% {
+                transform: scale(1);
+                opacity: 0;
+            }
+        }
+
+        .radar-wave {
+            animation: radar-sweep 6s linear infinite;
+        }
+        .radar-wave-delayed {
+            animation: radar-sweep 6s linear infinite;
+            animation-delay: 3s;
+        }
+
+        /* Blip Pulsing Animation */
+        @keyframes blip-pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.8);
+                transform: scale(0.85);
+            }
+            70% {
+                box-shadow: 0 0 0 15px rgba(236, 72, 153, 0);
+                transform: scale(1.15);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(236, 72, 153, 0);
+                transform: scale(0.85);
+            }
+        }
+
+        .person-blip {
+            animation: blip-pulse 1.3s infinite;
+        }
+
+        /* Grid Background Pattern */
+        .radar-grid {
+            background-size: 30px 30px;
+            background-image: 
+                linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+        }
+
+        /* Neon Wall Blueprint Style */
+        .wall-line {
+            filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.6));
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden p-4 md:p-6 gap-6">
+
+    <!-- Header Panel -->
+    <header class="glass-panel rounded-2xl px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 z-20">
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-blue-600 to-purple-600 flex items-center justify-center shadow-lg shadow-purple-500/20">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071a10.5 10.5 0 0114.142 0M1.398 7.071A16.5 16.5 0 0122.61 7.07"></path>
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 tracking-wide font-orbitron">
+                    WHOLE-HOUSE RADAR & TRAJECTORY
+                </h1>
+                <p class="text-xs text-gray-400 font-medium">Continuous Path Tracking & Blueprint Wall Mapper</p>
+            </div>
+        </div>
+        
+        <div class="flex flex-wrap items-center gap-3">
+            <!-- Simulator Switch -->
+            <button id="toggle-sim-btn" class="px-4 py-2 bg-purple-950/60 hover:bg-purple-900/60 text-purple-400 font-semibold rounded-lg text-xs font-orbitron border border-purple-900/50 transition-all shadow-[0_0_10px_rgba(168,85,247,0.15)] flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-purple-500 animate-ping"></span>
+                SIMULATOR: OFF
+            </button>
+            
+            <button id="draw-walls-btn" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold rounded-lg text-xs font-orbitron border border-gray-700 transition-all">
+                DRAW WALLS
+            </button>
+            <button id="clear-walls-btn" class="px-4 py-2 bg-red-950/40 hover:bg-red-900/40 text-red-400 font-semibold rounded-lg text-xs font-orbitron border border-red-900/50 transition-all">
+                CLEAR MAP
+            </button>
+            <div id="status-badge" class="px-5 py-2.5 rounded-full font-bold text-xs tracking-widest font-orbitron transition-all duration-300 shadow bg-gray-800 text-gray-400 border border-gray-700">
+                OFFLINE / STANDBY
+            </div>
+        </div>
+    </header>
+
+    <!-- Dashboard Content -->
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0">
+        
+        <!-- Left Sidebar: Stats & Charts (col-span-4) -->
+        <div class="lg:col-span-4 flex flex-col gap-6 min-h-0 z-10">
+            <!-- Navigation Metrics Card -->
+            <div class="glass-panel rounded-2xl p-6 flex flex-col gap-4">
+                <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+                    <h2 class="text-sm font-semibold text-gray-400 tracking-wider font-orbitron">RADAR TELEMETRY</h2>
+                    <span id="active-dot" class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping"></span>
+                </div>
+                
+                <div class="flex items-baseline justify-between">
+                    <div class="flex flex-col">
+                        <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Estimated Distance</span>
+                        <div class="flex items-baseline gap-1">
+                            <span id="distance-val" class="text-5xl font-black font-orbitron tracking-tighter text-white">-</span>
+                            <span class="text-gray-400 text-sm font-bold">meters</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-end">
+                        <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Direction</span>
+                        <span id="direction-badge" class="text-xs font-bold font-orbitron mt-1 text-gray-400">STATIONARY</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 pt-4 border-t border-gray-800/80">
+                    <div class="bg-gray-900/40 p-3 rounded-xl border border-gray-800/50">
+                        <div class="text-[10px] text-gray-500 font-bold mb-0.5">CURRENT RSSI</div>
+                        <div id="rssi-val" class="text-lg font-bold font-orbitron text-white">...</div>
+                    </div>
+                    <div class="bg-gray-900/40 p-3 rounded-xl border border-gray-800/50">
+                        <div class="text-[10px] text-gray-500 font-bold mb-0.5">SIGNAL DRIFT</div>
+                        <div id="drift-val" class="text-lg font-bold font-orbitron text-emerald-400">...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Signal History Timeline Card -->
+            <div class="glass-panel rounded-2xl p-5 flex-1 flex flex-col min-h-0">
+                <h2 class="text-sm font-semibold text-gray-400 tracking-wider font-orbitron mb-4 border-b border-gray-800 pb-3">SIGNAL FLUCTUATION</h2>
+                <div class="flex-1 relative w-full h-full min-h-0">
+                    <canvas id="rssiChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center/Right: Interactive House Canvas Radar (col-span-8) -->
+        <div class="lg:col-span-8 flex flex-col gap-6 min-h-0">
+            <!-- Floor Plan Card -->
+            <div class="glass-panel rounded-2xl p-6 flex-[2] flex flex-col min-h-0 relative overflow-hidden">
+                
+                <div class="flex justify-between items-center mb-4 z-10">
+                    <div>
+                        <h2 class="text-sm font-semibold text-gray-300 tracking-wider font-orbitron">REAL-TIME TRAJECTORY PATH</h2>
+                        <p id="map-subtext" class="text-xs text-gray-500">Auto-detecting / rendering your floor layout and movements</p>
+                    </div>
+                    
+                    <div id="draw-instructions" class="hidden bg-blue-500/10 text-blue-400 border border-blue-500/20 px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider font-orbitron animate-pulse">
+                        WALL DRAWING ENGAGED: CLICK TO PLACE POINTS
+                    </div>
+                </div>
+                
+                <!-- 2D House Blueprint Drawing Canvas -->
+                <div id="floorplan-area" class="flex-1 w-full bg-slate-950/70 rounded-xl border border-gray-800/80 relative overflow-hidden radar-grid flex items-center justify-center min-h-[350px] cursor-crosshair">
+                    
+                    <!-- SVG Overlay for drawing blueprint walls, path trails, and radar lines -->
+                    <svg id="radar-svg-overlay" class="absolute inset-0 w-full h-full pointer-events-none z-10">
+                        <defs>
+                            <linearGradient id="trail-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.1"/>
+                                <stop offset="50%" stop-color="#a855f7" stop-opacity="0.5"/>
+                                <stop offset="100%" stop-color="#ec4899" stop-opacity="1"/>
+                            </linearGradient>
+                            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                                <feGaussianBlur stdDeviation="5" result="blur" />
+                                <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+                            </filter>
+                        </defs>
+                        
+                        <!-- Radar sonar background grids -->
+                        <circle cx="50%" cy="50%" r="60" stroke="rgba(59, 130, 246, 0.05)" stroke-width="1.5" fill="none"/>
+                        <circle cx="50%" cy="50%" r="140" stroke="rgba(59, 130, 246, 0.05)" stroke-width="1.5" fill="none"/>
+                        <circle cx="50%" cy="50%" r="220" stroke="rgba(59, 130, 246, 0.05)" stroke-width="1.5" fill="none"/>
+                        <circle cx="50%" cy="50%" r="300" stroke="rgba(59, 130, 246, 0.04)" stroke-width="1.5" fill="none"/>
+                        
+                        <!-- Sonar radar waves -->
+                        <circle cx="50%" cy="50%" r="300" stroke="rgba(139, 92, 246, 0.12)" stroke-width="1.5" fill="none" class="radar-wave"/>
+                        <circle cx="50%" cy="50%" r="300" stroke="rgba(139, 92, 246, 0.08)" stroke-width="1.5" fill="none" class="radar-wave-delayed"/>
+
+                        <!-- Continuous Trajectory Path (Path Map) -->
+                        <path id="path-trail" d="" stroke="url(#trail-grad)" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+
+                        <!-- Dynamic Sonar Distance Ring -->
+                        <circle id="distance-ring" cx="50%" cy="50%" r="0" stroke="rgba(59, 130, 246, 0.25)" stroke-width="2" stroke-dasharray="8 6" fill="none" class="transition-all duration-500" filter="url(#glow)"/>
+                        
+                        <!-- Walls Group (Blueprint lines) -->
+                        <g id="walls-group"></g>
+                        
+                        <!-- Temporary wall drawing line -->
+                        <line id="temp-wall-line" x1="0" y1="0" x2="0" y2="0" stroke="#3b82f6" stroke-width="4" stroke-dasharray="5 5" class="hidden"/>
+                    </svg>
+
+                    <!-- Central Router Node -->
+                    <div id="router-node" class="absolute w-12 h-12 rounded-full bg-blue-600/20 border border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.4)] flex items-center justify-center z-20 pointer-events-none select-none" style="left: calc(50% - 24px); top: calc(50% - 24px);">
+                        <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                        </svg>
+                        <div class="absolute -bottom-6 text-[9px] font-bold text-blue-400 tracking-wider font-orbitron whitespace-nowrap">WIFI ROUTER</div>
+                    </div>
+
+                    <!-- Live Person Blips -->
+                    <div id="blips-container" class="absolute inset-0 w-full h-full pointer-events-none z-20">
+                        <!-- Pulsing neon dot for detected movement -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Log Card -->
+            <div class="glass-panel rounded-2xl p-5 flex-1 flex flex-col min-h-0">
+                <h2 class="text-sm font-semibold text-gray-400 tracking-wider font-orbitron mb-3 border-b border-gray-800 pb-2">ACTIVITY LOG</h2>
+                <div class="flex-1 overflow-y-auto min-h-[100px]">
+                    <table class="w-full text-left text-xs">
+                        <thead>
+                            <tr class="text-gray-500 uppercase tracking-wider border-b border-gray-800/60">
+                                <th class="pb-2 font-bold">Time</th>
+                                <th class="pb-2 font-bold">Event Type</th>
+                                <th class="pb-2 font-bold text-center">RSSI</th>
+                                <th class="pb-2 font-bold">Location Code</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activity-log-body" class="divide-y divide-gray-800/40 text-gray-300">
+                            <!-- Populated dynamically -->
+                            <tr>
+                                <td colspan="4" class="py-4 text-center text-gray-500 italic">No events logged yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- 1. Init Chart.js ---
+        const ctx = document.getElementById('rssiChart').getContext('2d');
+        const rssiChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: Array.from({length: 60}, (_, i) => i),
+                datasets: [{
+                    label: 'Live RSSI',
+                    data: [],
+                    borderColor: '#3b82f6',
+                    borderWidth: 2,
+                    fill: true,
+                    backgroundColor: (context) => {
+                        const chart = context.chart;
+                        const {ctx, chartArea} = chart;
+                        if (!chartArea) return null;
+                        const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                        gradient.addColorStop(0, 'rgba(59, 130, 246, 0.25)');
+                        gradient.addColorStop(1, 'rgba(59, 130, 246, 0.00)');
+                        return gradient;
+                    },
+                    tension: 0.35,
+                    pointRadius: 0
+                },
+                {
+                    label: 'Threshold',
+                    data: [],
+                    borderColor: '#f43f5e',
+                    borderWidth: 1.5,
+                    borderDash: [6, 4],
+                    pointRadius: 0,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 0 },
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { display: false },
+                    y: { 
+                        display: true, 
+                        grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                        ticks: { 
+                            color: '#6b7280',
+                            font: { family: 'Orbitron', size: 10 }
+                        }
+                    }
+                }
+            }
+        });
+
+        // --- 2. State Variables ---
+        let pathHistory = []; // Trajectory history [{xPct, yPct}]
+        let walls = [];       // Array of wall segments [{x1, y1, x2, y2}] representing percentages
+        let isDrawing = false;
+        let drawStartPoint = null;
+        let lastRssi = null;
+        let estimatedDistance = 0;
+        let currentAngle = 0; // Simulated angle drift
+        let presenceDetector = false;
+
+        // Simulation Mode variables
+        let isSimulating = false;
+        let simInterval = null;
+        let simWaypointIndex = 0;
+        let simProgress = 0;
+        let simHistoryData = Array(60).fill(-50);
+        
+        // Default Floor Plan Blueprint Walls
+        const defaultWalls = [
+            // Outer Boundaries
+            { x1: 10, y1: 10, x2: 90, y2: 10 },
+            { x1: 90, y1: 10, x2: 90, y2: 90 },
+            { x1: 90, y2: 90, x2: 10, y2: 90 },
+            { x1: 10, y1: 90, x2: 10, y2: 10 },
+            // Bedroom Partition (Top-Left)
+            { x1: 10, y1: 45, x2: 38, y2: 45 },
+            { x1: 48, y1: 45, x2: 50, y2: 45 },
+            { x1: 50, y1: 10, x2: 50, y2: 45 },
+            // Kitchen Partition (Bottom-Left)
+            { x1: 50, y1: 55, x2: 50, y2: 90 },
+            { x1: 10, y1: 65, x2: 38, y2: 65 },
+            // Living Room Partitions (Right Side)
+            { x1: 65, y1: 35, x2: 90, y2: 35 },
+            { x1: 65, y1: 10, x2: 65, y2: 25 },
+            { x1: 65, y1: 35, x2: 65, y2: 65 },
+            { x1: 65, y1: 75, x2: 65, y2: 90 }
+        ];
+
+        // Simulation route waypoints (smooth loop around corridors)
+        const simWaypoints = [
+            { x: 78, y: 22, name: "living_room" }, // Living room corner
+            { x: 58, y: 25, name: "corridor" },    // Main hallway
+            { x: 30, y: 25, name: "bedroom" },     // Master bedroom
+            { x: 30, y: 35, name: "bedroom" },     // Bedroom corner
+            { x: 58, y: 50, name: "foyer" },       // Foyer
+            { x: 30, y: 78, name: "kitchen" },     // Kitchen
+            { x: 58, y: 80, name: "foyer" },       // Foyer
+            { x: 78, y: 78, name: "balcony" },     // Balcony
+            { x: 78, y: 50, name: "living_room" }  // Living room bottom
+        ];
+
+        // Load walls from localStorage or use defaults
+        const cachedWalls = localStorage.getItem('wifi_radar_walls');
+        if (cachedWalls) {
+            try {
+                walls = JSON.parse(cachedWalls);
+            } catch (e) {
+                walls = [...defaultWalls];
+            }
+        } else {
+            walls = [...defaultWalls];
+        }
+
+        // --- 3. Wall Drawing Logic ---
+        const drawBtn = document.getElementById('draw-walls-btn');
+        const clearBtn = document.getElementById('clear-walls-btn');
+        const canvasArea = document.getElementById('floorplan-area');
+        const tempLine = document.getElementById('temp-wall-line');
+        const drawInst = document.getElementById('draw-instructions');
+
+        drawBtn.addEventListener('click', () => {
+            isDrawing = !isDrawing;
+            drawStartPoint = null;
+            tempLine.classList.add('hidden');
+            if (isDrawing) {
+                drawBtn.innerText = "FINISH DRAWING";
+                drawBtn.className = "px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg text-xs font-orbitron border border-blue-500 transition-all shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-pulse";
+                drawInst.classList.remove('hidden');
+            } else {
+                drawBtn.innerText = "DRAW WALLS";
+                drawBtn.className = "px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold rounded-lg text-xs font-orbitron border border-gray-700 transition-all";
+                drawInst.classList.add('hidden');
+                localStorage.setItem('wifi_radar_walls', JSON.stringify(walls));
+            }
+        });
+
+        clearBtn.addEventListener('click', () => {
+            walls = [];
+            pathHistory = [];
+            localStorage.setItem('wifi_radar_walls', JSON.stringify(walls));
+            renderWalls();
+            drawPathTrail();
+        });
+
+        canvasArea.addEventListener('click', (e) => {
+            if (!isDrawing) return;
+            
+            const rect = canvasArea.getBoundingClientRect();
+            const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+            const yPct = ((e.clientY - rect.top) / rect.height) * 100;
+
+            if (!drawStartPoint) {
+                drawStartPoint = { x: xPct, y: yPct };
+                tempLine.setAttribute('x1', `${(xPct / 100) * rect.width}`);
+                tempLine.setAttribute('y1', `${(yPct / 100) * rect.height}`);
+                tempLine.classList.remove('hidden');
+            } else {
+                walls.push({
+                    x1: drawStartPoint.x,
+                    y1: drawStartPoint.y,
+                    x2: xPct,
+                    y2: yPct
+                });
+                drawStartPoint = null;
+                tempLine.classList.add('hidden');
+                renderWalls();
+            }
+        });
+
+        canvasArea.addEventListener('mousemove', (e) => {
+            if (!isDrawing || !drawStartPoint) return;
+            const rect = canvasArea.getBoundingClientRect();
+            tempLine.setAttribute('x2', `${e.clientX - rect.left}`);
+            tempLine.setAttribute('y2', `${e.clientY - rect.top}`);
+        });
+
+        function renderWalls() {
+            const wallsGroup = document.getElementById('walls-group');
+            const rect = canvasArea.getBoundingClientRect();
+            
+            let html = '';
+            walls.forEach(w => {
+                const x1Px = (w.x1 / 100) * rect.width;
+                const y1Px = (w.y1 / 100) * rect.height;
+                const x2Px = (w.x2 / 100) * rect.width;
+                const y2Px = (w.y2 / 100) * rect.height;
+
+                html += `<line x1="${x1Px}" y1="${y1Px}" x2="${x2Px}" y2="${y2Px}" stroke="#3b82f6" stroke-width="5" stroke-linecap="round" class="wall-line" />`;
+            });
+            wallsGroup.innerHTML = html;
+        }
+
+        window.addEventListener('resize', () => {
+            renderWalls();
+            drawPathTrail();
+        });
+
+        // Initial render
+        setTimeout(renderWalls, 500);
+
+        // --- 4. Trajectory Path Renderer ---
+        function drawPathTrail() {
+            const path = document.getElementById('path-trail');
+            const rect = canvasArea.getBoundingClientRect();
+            
+            if (pathHistory.length < 2) {
+                path.setAttribute('d', '');
+                return;
+            }
+
+            let dString = '';
+            pathHistory.forEach((pt, idx) => {
+                const xPx = (pt.x / 100) * rect.width;
+                const yPx = (pt.y / 100) * rect.height;
+                
+                if (idx === 0) {
+                    dString += `M ${xPx} ${yPx}`;
+                } else {
+                    dString += ` L ${xPx} ${yPx}`;
+                }
+            });
+            path.setAttribute('d', dString);
+        }
+
+        // --- 5. Simulator Engine (Auto-Pilot / Demonstration) ---
+        const toggleSimBtn = document.getElementById('toggle-sim-btn');
+        let virtualX = 78;
+        let virtualY = 22;
+
+        toggleSimBtn.addEventListener('click', () => {
+            isSimulating = !isSimulating;
+            if (isSimulating) {
+                toggleSimBtn.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>SIMULATOR: ACTIVE`;
+                toggleSimBtn.className = "px-4 py-2 bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-400 font-semibold rounded-lg text-xs font-orbitron border border-emerald-900/50 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] flex items-center gap-2";
+                pathHistory = [];
+                simProgress = 0;
+                startSimulation();
+            } else {
+                toggleSimBtn.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-purple-500 animate-ping"></span>SIMULATOR: OFF`;
+                toggleSimBtn.className = "px-4 py-2 bg-purple-950/60 hover:bg-purple-900/60 text-purple-400 font-semibold rounded-lg text-xs font-orbitron border border-purple-900/50 transition-all flex items-center gap-2";
+                stopSimulation();
+            }
+        });
+
+        function startSimulation() {
+            simInterval = setInterval(() => {
+                const currentWp = simWaypoints[simWaypointIndex];
+                const nextWp = simWaypoints[(simWaypointIndex + 1) % simWaypoints.length];
+                
+                simProgress += 0.08; // moderate walk speed
+                if (simProgress >= 1) {
+                    simProgress = 0;
+                    simWaypointIndex = (simWaypointIndex + 1) % simWaypoints.length;
+                    logSimulatedEvent(nextWp.name);
+                }
+                
+                virtualX = currentWp.x + (nextWp.x - currentWp.x) * simProgress;
+                virtualY = currentWp.y + (nextWp.y - currentWp.y) * simProgress;
+                
+                virtualX += (Math.random() - 0.5) * 0.4;
+                virtualY += (Math.random() - 0.5) * 0.4;
+
+                const dx = virtualX - 50;
+                const dy = virtualY - 50;
+                const distancePct = Math.sqrt(dx*dx + dy*dy);
+                const meters = 0.5 + (distancePct / 50) * 6;
+                estimatedDistance = meters;
+
+                const noise = (Math.random() - 0.5) * 2;
+                const simulatedRssi = Math.round(-32 - 22 * Math.log10(meters) + noise);
+
+                simHistoryData.shift();
+                simHistoryData.push(simulatedRssi);
+
+                const simState = {
+                    rssi: simulatedRssi,
+                    occupied: true,
+                    num_people: 1,
+                    mean: -45.0,
+                    std: 1.8,
+                    threshold: -49.5,
+                    history: simHistoryData,
+                    predicted_room: nextWp.name,
+                    people: [{ distance_cm: Math.round(meters * 100) }]
+                };
+
+                updateUIWithSim(simState, virtualX, virtualY);
+
+            }, 250);
+        }
+
+        function stopSimulation() {
+            clearInterval(simInterval);
+            document.getElementById('blips-container').innerHTML = '';
+            pathHistory = [];
+            drawPathTrail();
+        }
+
+        function logSimulatedEvent(room) {
+            const logBody = document.getElementById('activity-log-body');
+            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-gray-900/30 transition-colors";
+            tr.innerHTML = `
+                <td class="py-2.5 font-mono text-[11px] text-gray-400">${timeStr}</td>
+                <td class="py-2.5"><span class="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded text-[10px] font-bold font-orbitron">MOTION</span></td>
+                <td class="py-2.5 text-center font-mono font-bold text-purple-400">${Math.round(-40 - Math.random()*20)} dBm</td>
+                <td class="py-2.5 font-bold text-gray-300 text-xs">${room.replace(/[_-]/g, ' ').toUpperCase()}</td>
+            `;
+            
+            if (logBody.children[0] && logBody.children[0].innerText.includes("No events")) {
+                logBody.innerHTML = '';
+            }
+            logBody.insertBefore(tr, logBody.firstChild);
+            
+            if (logBody.children.length > 10) {
+                logBody.removeChild(logBody.lastChild);
+            }
+        }
+
+        function updateUIWithSim(data, xPct, yPct) {
+            presenceDetector = data.occupied;
+            estimatedDistance = data.people[0].distance_cm / 100;
+            
+            // Text metrics
+            document.getElementById('distance-val').innerText = estimatedDistance.toFixed(2);
+            document.getElementById('rssi-val').innerText = `${data.rssi} dBm`;
+            document.getElementById('baseline-val').innerText = `${data.mean.toFixed(1)} dBm`;
+            document.getElementById('threshold-val').innerText = `${data.threshold.toFixed(1)} dBm`;
+            document.getElementById('std-val').innerText = `±${data.std.toFixed(2)}`;
+
+            // Direction badge based on delta
+            const dirBadge = document.getElementById('direction-badge');
+            const driftEl = document.getElementById('drift-val');
+            
+            if (lastRssi !== null) {
+                const diff = data.rssi - lastRssi;
+                driftEl.innerText = `${diff > 0 ? '+' : ''}${diff.toFixed(1)} dB`;
+                driftEl.className = diff >= 0 ? "text-lg font-bold font-orbitron text-emerald-400" : "text-lg font-bold font-orbitron text-rose-400";
+                
+                if (diff > 0.8) {
+                    dirBadge.innerText = "APPROACHING ROUTER";
+                    dirBadge.className = "text-xs font-bold font-orbitron mt-1 text-emerald-400 animate-pulse";
+                } else if (diff < -0.8) {
+                    dirBadge.innerText = "RECEDING AWAY";
+                    dirBadge.className = "text-xs font-bold font-orbitron mt-1 text-rose-400 animate-pulse";
+                } else {
+                    dirBadge.innerText = "PATROLLING CORRIDOR";
+                    dirBadge.className = "text-xs font-bold font-orbitron mt-1 text-purple-400";
+                }
+            }
+            
+            lastRssi = data.rssi;
+
+            // Status Badge
+            const badge = document.getElementById('status-badge');
+            const activeDot = document.getElementById('active-dot');
+            badge.innerText = `AUTO-TRACKING: ACTIVE (${data.predicted_room.toUpperCase()})`;
+            badge.className = "px-5 py-2.5 rounded-full font-bold text-xs tracking-widest font-orbitron transition-all duration-300 shadow-lg border border-rose-500 bg-rose-950/40 text-rose-400 animate-pulse";
+            activeDot.className = "w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping";
+
+            // Chart Update
+            rssiChart.data.datasets[0].data = data.history;
+            rssiChart.data.datasets[1].data = Array(data.history.length).fill(data.threshold);
+            rssiChart.update();
+
+            // Set sonar ring radius based on simulated distance in pixels
+            const rect = canvasArea.getBoundingClientRect();
+            let radiusPx = estimatedDistance * 55;
+            radiusPx = Math.max(30, Math.min(Math.min(rect.width, rect.height) / 2 - 20, radiusPx));
+            
+            const distRing = document.getElementById('distance-ring');
+            distRing.setAttribute('r', `${radiusPx}`);
+            distRing.setAttribute('stroke', 'rgba(236, 72, 153, 0.45)');
+
+            // Append point to trail
+            const lastPoint = pathHistory[pathHistory.length - 1];
+            if (!lastPoint || Math.abs(lastPoint.x - xPct) > 0.4 || Math.abs(lastPoint.y - yPct) > 0.4) {
+                pathHistory.push({ x: xPct, y: yPct });
+                if (pathHistory.length > 55) {
+                    pathHistory.shift();
+                }
+                drawPathTrail();
+            }
+
+            // Draw blip
+            const blipsContainer = document.getElementById('blips-container');
+            blipsContainer.innerHTML = '';
+            const blipEl = document.createElement('div');
+            blipEl.className = "absolute w-7 h-7 bg-pink-500/30 border border-pink-500 rounded-full flex items-center justify-center person-blip z-20 pointer-events-none shadow-[0_0_15px_rgba(236,72,153,0.5)]";
+            blipEl.style.left = `calc(${xPct}% - 14px)`;
+            blipEl.style.top = `calc(${yPct}% - 14px)`;
+            blipEl.innerHTML = `
+                <div class="w-2.5 h-2.5 rounded-full bg-pink-400"></div>
+                <div class="absolute -bottom-5 text-[8px] font-bold text-pink-400 font-orbitron whitespace-nowrap">TARGET 1</div>
+            `;
+            blipsContainer.appendChild(blipEl);
+        }
+
+        // --- 6. Polling & Data Retrieval (Real Mode) ---
+        async function fetchEvents() {
+            if (isSimulating) return; // ignore real events in demo mode
+            try {
+                const res = await fetch('/api/events');
+                const events = await res.json();
+                const logBody = document.getElementById('activity-log-body');
+                
+                if (!events || events.length === 0) {
+                    logBody.innerHTML = `
+                        <tr>
+                            <td colspan="4" class="py-4 text-center text-gray-500 italic">No events logged yet.</td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                let html = '';
+                events.forEach(ev => {
+                    let eventBadge = '';
+                    const timeStr = new Date(ev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    
+                    if (ev.event_type === 'occupancy_start') {
+                        eventBadge = `<span class="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded text-[10px] font-bold font-orbitron">MOTION START</span>`;
+                    } else if (ev.event_type === 'occupancy_end') {
+                        eventBadge = `<span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] font-bold font-orbitron">CLEAR</span>`;
+                    } else {
+                        eventBadge = `<span class="bg-gray-800 text-gray-400 px-2 py-0.5 rounded text-[10px] font-bold font-orbitron">${ev.event_type.toUpperCase()}</span>`;
+                    }
+
+                    html += `
+                        <tr class="hover:bg-gray-900/30 transition-colors">
+                            <td class="py-2.5 font-mono text-[11px] text-gray-400">${timeStr}</td>
+                            <td class="py-2.5">${eventBadge}</td>
+                            <td class="py-2.5 text-center font-mono font-bold ${ev.rssi < -70 ? 'text-rose-400' : 'text-purple-400'}">${ev.rssi} dBm</td>
+                            <td class="py-2.5 font-bold text-gray-300 text-xs">${ev.room ? formatRoomName(ev.room) : 'Zone Matrix'}</td>
+                        </tr>
+                    `;
+                });
+                logBody.innerHTML = html;
+            } catch (err) {
+                console.error("Error fetching event log:", err);
+            }
+        }
+
+        async function fetchData() {
+            if (isSimulating) {
+                setTimeout(fetchData, 1000);
+                return;
+            }
+            try {
+                const res = await fetch('/api/data');
+                const data = await res.json();
+                
+                if (data.rssi !== null) {
+                    updateUI(data);
+                }
+            } catch (err) {
+                console.error("Error fetching live data:", err);
+            }
+            setTimeout(fetchData, 1000);
+        }
+
+        function updateUI(data) {
+            presenceDetector = data.occupied;
+            const meters = (data.people[0] ? data.people[0].distance_cm : 300) / 100;
+            estimatedDistance = meters;
+            document.getElementById('distance-val').innerText = meters.toFixed(2);
+            
+            const dirBadge = document.getElementById('direction-badge');
+            const driftEl = document.getElementById('drift-val');
+            if (lastRssi !== null && data.occupied) {
+                const diff = data.rssi - lastRssi;
+                driftEl.innerText = `${diff > 0 ? '+' : ''}${diff.toFixed(1)} dB`;
+                driftEl.className = diff >= 0 ? "text-lg font-bold font-orbitron text-emerald-400" : "text-lg font-bold font-orbitron text-rose-400";
+
+                if (diff > 1.2) {
+                    dirBadge.innerText = "APPROACHING ROUTER";
+                    dirBadge.className = "text-xs font-bold font-orbitron mt-1 text-emerald-400 animate-pulse";
+                } else if (diff < -1.2) {
+                    dirBadge.innerText = "RECEDING AWAY";
+                    dirBadge.className = "text-xs font-bold font-orbitron mt-1 text-rose-400 animate-pulse";
+                } else {
+                    dirBadge.innerText = "SLIGHT MOVEMENT";
+                    dirBadge.className = "text-xs font-bold font-orbitron mt-1 text-purple-400";
+                }
+            } else {
+                driftEl.innerText = "0.0 dB";
+                driftEl.className = "text-lg font-bold font-orbitron text-gray-500";
+                dirBadge.innerText = data.occupied ? "SLIGHT MOVEMENT" : "STATIONARY";
+                dirBadge.className = "text-xs font-bold font-orbitron mt-1 text-gray-400";
+            }
+            
+            document.getElementById('rssi-val').innerText = `${data.rssi} dBm`;
+            document.getElementById('baseline-val').innerText = `${data.mean.toFixed(1)} dBm`;
+            document.getElementById('threshold-val').innerText = `${data.threshold.toFixed(1)} dBm`;
+            document.getElementById('std-val').innerText = `±${data.std.toFixed(2)}`;
+
+            const badge = document.getElementById('status-badge');
+            const activeDot = document.getElementById('active-dot');
+            if (data.occupied) {
+                const roomContext = data.predicted_room ? ` (${formatRoomName(data.predicted_room).toUpperCase()})` : '';
+                badge.innerText = `${data.num_people} OCCUPANT(S) ACTIVE${roomContext}`;
+                badge.className = "px-5 py-2.5 rounded-full font-bold text-xs tracking-widest font-orbitron transition-all duration-300 shadow-lg border border-rose-500 bg-rose-950/40 text-rose-400 animate-pulse";
+                activeDot.className = "w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping";
+            } else {
+                badge.innerText = "NO OCCUPANCY DETECTED";
+                badge.className = "px-5 py-2.5 rounded-full font-bold text-xs tracking-widest font-orbitron transition-all duration-300 shadow border border-emerald-500 bg-emerald-950/40 text-emerald-400";
+                activeDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
+            }
+
+            // Chart
+            rssiChart.data.datasets[0].data = data.history;
+            rssiChart.data.datasets[1].data = Array(data.history.length).fill(data.threshold);
+            
+            const minRssi = Math.min(...data.history, data.threshold) - 5;
+            const maxRssi = Math.max(...data.history, data.mean) + 5;
+            rssiChart.options.scales.y.min = minRssi;
+            rssiChart.options.scales.y.max = maxRssi;
+            rssiChart.update();
+
+            // Real Blip Coordinate mapping
+            const rect = canvasArea.getBoundingClientRect();
+            let radiusPx = estimatedDistance * 55;
+            radiusPx = Math.max(30, Math.min(Math.min(rect.width, rect.height) / 2 - 20, radiusPx));
+            
+            const distRing = document.getElementById('distance-ring');
+            distRing.setAttribute('r', `${radiusPx}`);
+
+            if (presenceDetector) {
+                distRing.setAttribute('stroke', 'rgba(236, 72, 153, 0.45)');
+            } else {
+                distRing.setAttribute('stroke', 'rgba(59, 130, 246, 0.25)');
+            }
+
+            // Update Drift Angle
+            const driftSpeed = presenceDetector ? (0.05 + (Math.abs(data.rssi - lastRssi) * 0.02)) : 0.005;
+            currentAngle += (Math.random() - 0.5) * driftSpeed;
+
+            const blipsContainer = document.getElementById('blips-container');
+            blipsContainer.innerHTML = '';
+
+            if (presenceDetector && data.people && data.people.length > 0) {
+                // Loop through all people in data.people
+                data.people.forEach(p => {
+                    const pDistM = p.distance_cm / 100;
+                    let pRadiusPx = pDistM * 55;
+                    pRadiusPx = Math.max(30, Math.min(Math.min(rect.width, rect.height) / 2 - 20, pRadiusPx));
+                    
+                    // Base direction of room
+                    let roomAngle = currentAngle;
+                    if (data.predicted_room && roomLayouts[data.predicted_room]) {
+                        const layout = roomLayouts[data.predicted_room];
+                        const roomCenterX = layout.leftPct + (layout.widthPct / 2);
+                        const roomCenterY = layout.topPct + (layout.heightPct / 2);
+                        roomAngle = Math.atan2(roomCenterY - 50, roomCenterX - 50);
+                    }
+                    
+                    // Add person offset angle and a smooth dynamic oscillation so target blips glide and look alive
+                    const timeOsc = Math.sin(Date.now() / 1200 + p.angle_deg) * 0.15;
+                    const totalAngle = roomAngle + (p.angle_deg * Math.PI / 180) + timeOsc;
+                    
+                    const pRadiusJitter = pRadiusPx + Math.cos(Date.now() / 800 + p.angle_deg) * 10;
+                    const radPctX = (pRadiusJitter / rect.width) * 100;
+                    const radPctY = (pRadiusJitter / rect.height) * 100;
+
+                    let blipX = 50 + radPctX * Math.cos(totalAngle);
+                    let blipY = 50 + radPctY * Math.sin(totalAngle);
+                    blipX = Math.max(2, Math.min(98, blipX));
+                    blipY = Math.max(2, Math.min(98, blipY));
+
+                    // If it is the first target (P1), track its trajectory in pathHistory
+                    if (p.id === 'P1') {
+                        const lastPoint = pathHistory[pathHistory.length - 1];
+                        if (!lastPoint || Math.abs(lastPoint.x - blipX) > 0.5 || Math.abs(lastPoint.y - blipY) > 0.5) {
+                            pathHistory.push({ x: blipX, y: blipY });
+                            if (pathHistory.length > 40) {
+                                pathHistory.shift();
+                            }
+                            drawPathTrail();
+                        }
+                    }
+
+                    // Create active blip element
+                    const blipEl = document.createElement('div');
+                    blipEl.className = "absolute w-7 h-7 bg-pink-500/30 border border-pink-500 rounded-full flex items-center justify-center person-blip z-20 pointer-events-none shadow-[0_0_15px_rgba(236,72,153,0.5)]";
+                    blipEl.style.left = `calc(${blipX}% - 14px)`;
+                    blipEl.style.top = `calc(${blipY}% - 14px)`;
+                    blipEl.innerHTML = `
+                        <div class="w-2.5 h-2.5 rounded-full bg-pink-400"></div>
+                        <div class="absolute -bottom-5 text-[8px] font-bold text-pink-400 font-orbitron whitespace-nowrap">${p.id}</div>
+                    `;
+                    blipsContainer.appendChild(blipEl);
+                });
+            } else {
+                // Stationary single target blip (Device)
+                let blipX = 50 + ((radiusPx / rect.width) * 100) * Math.cos(currentAngle);
+                let blipY = 50 + ((radiusPx / rect.height) * 100) * Math.sin(currentAngle);
+                blipX = Math.max(2, Math.min(98, blipX));
+                blipY = Math.max(2, Math.min(98, blipY));
+
+                const blipEl = document.createElement('div');
+                blipEl.className = "absolute w-6 h-6 bg-blue-500/20 border border-blue-500/60 rounded-full flex items-center justify-center z-20 pointer-events-none shadow-[0_0_10px_rgba(59,130,246,0.3)]";
+                blipEl.style.left = `calc(${blipX}% - 12px)`;
+                blipEl.style.top = `calc(${blipY}% - 12px)`;
+                blipEl.innerHTML = `
+                    <div class="w-2 h-2 rounded-full bg-blue-400"></div>
+                    <div class="absolute -bottom-5 text-[8px] font-bold text-blue-400 font-orbitron whitespace-nowrap">STATIONARY</div>
+                `;
+                blipsContainer.appendChild(blipEl);
+            }
+
+            lastRssi = data.rssi;
+        }
+
+        // Start loops
+        fetchData();
+        fetchEvents();
+        setInterval(fetchEvents, 3000);
+    </script>
+</body>
+</html>
